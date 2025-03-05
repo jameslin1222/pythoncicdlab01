@@ -1,0 +1,54 @@
+### BUG 1 修正: 相依套件錯誤導致無法build image 
+ERROR 內容
+=========
+3.986   Downloading pydantic_settings-2.3.4-py3-none-any.whl.metadata (3.3 kB)
+4.097 Collecting psycopg==3.2.1 (from -r requirements.txt (line 8))
+4.201   Downloading psycopg-3.2.1-py3-none-any.whl.metadata (4.2 kB)
+4.624 ERROR: Could not find a version that satisfies the requirement psycopg-binary==3.2.1 (from versions: 3.2.2, 3.2.3, 3.2.4, 3.2.5)
+4.648
+4.648 [notice] A new release of pip is available: 24.3.1 -> 25.0.1
+4.648 [notice] To update, run: pip install --upgrade pip
+4.649 ERROR: No matching distribution found for psycopg-binary==3.2.1
+------
+failed to solve: process "/bin/sh -c python -m pip install -r requirements.txt" did not complete successfully: exit code: 1
+=================
+
+這邊有BUG而無法build，原因是依賴套件 psycopg-binary 版本不支援
+我修正:
+1.打開 requirements.txt
+2.把 psycopg-binary==3.2.1
+改為 psycopg-binary==3.2.5
+3.重新執行 docker compose up --build 即可
+
+
+##########
+### BUG 2 修正: POST失敗  (官方範例說明都是用 8001)
+ERROR 內容
+=========
+ C:\Users\pcuserj>curl -X GET http://localhost:8001
+curl: (7) Failed to connect to localhost port 8001 after 2260 ms: Could not connect to server
+=========
+原因:
+我發現 Dockerfile 中的還是為 8000，所以進行修正改為 8001
+
+我修正:
+~~~ 原本內容 (失敗)  47到51行 ~~~
+# Expose the port that the application listens on.
+EXPOSE 8000
+
+# Run the application.
+CMD uvicorn 'app:app' --host=0.0.0.0 --port=8000
+~~~~~~~~~~~~~~~~~~~~~~~~ 
+~~~ 我修正後 47到51行 ~~~
+# Expose the port that the application listens on.
+EXPOSE 8001
+
+# Run the application.
+CMD uvicorn 'app:app' --host=0.0.0.0 --port=8001
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+接著再重建啟動就可以了
+ex: 測試驗證可以成功
+C:\Users\pcuserj>curl -X GET http://localhost:8001
+"Hello, Docker!"
+

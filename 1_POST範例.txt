@@ -1,0 +1,127 @@
+### docker compose up -d 後用 POST 來新增資料
+## 注意: 官方的測試不可直接在Windows上用! 因為那是Linux上用的
+## 原始 (Linux)
+curl -X 'POST' \
+  'http://localhost:8001/heroes/' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "id": 1,
+  "name": "my hero",
+  "secret_name": "austing",
+  "age": 12
+}'
+
+
+## 修正後 (Windows)
+## CMD 下
+原因:
+^ 允許換行（但注意，最後一行不能有 ^）
+JSON 內容內仍需雙引號，但不必轉義
+
+做法1: 修改換行和改成雙引號
+curl -X POST "http://localhost:8001/heroes/" ^
+  -H "accept: application/json" ^
+  -H "Content-Type: application/json" ^
+  -d "{ \"id\": 1, \"name\": \"my hero\", \"secret_name\": \"austing\", \"age\": 12 }"
+
+ex:
+C:\Users\pcuserj>curl -X POST "http://localhost:8001/heroes/" ^
+More?   -H "accept: application/json" ^
+More?   -H "Content-Type: application/json" ^
+More?   -d "{ \"id\": 1, \"name\": \"my hero\", \"secret_name\": \"austing\", \"age\": 12 }"
+{"age":12,"name":"my hero","secret_name":"austing","id":1}
+
+做法2: 直接弄成一行，複製貼上還比較省事
+curl -X POST "http://localhost:8001/heroes/" -H "accept: application/json" -H "Content-Type: application/json" -d "{\"id\": 1, \"name\": \"my hero\", \"secret_name\": \"austing\", \"age\": 12}"
+########
+
+## PowerShell 下
+我測試中發現並不能像網路上或AI說的那樣只要把換行替換成 ` 就好，會出現以下錯誤:
+~~~ 錯誤內容: 
+Invoke-WebRequest : 無法繫結 'Headers' 參數。無法將類型 "System.String" 的 "accept: application/json" 值轉換為類型 "Sys
+tem.Collections.IDictionary"。
+位於 線路:2 字元:6
++   -H "accept: application/json" `
++      ~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (:) [Invoke-WebRequest]，ParameterBindingException
+    + FullyQualifiedErrorId : CannotConvertArgumentNoMessage,Microsoft.PowerShell.Commands.InvokeWebRequestCommand
+~~~
+
+原因:
+PowerShell 的 Invoke-WebRequest (iwr) 和 Invoke-RestMethod (irm) 不支援 -H 簡寫的方式，而且 -Headers 參數需要 使用哈希表 (@{}) 定義標頭
+
+修正後:
+$headers = @{
+    "accept" = "application/json"
+    "Content-Type" = "application/json"
+}
+
+$body = @{
+    id = 1
+    name = "my hero"
+    secret_name = "austing"
+    age = 12
+} | ConvertTo-Json -Compress
+
+Invoke-RestMethod -Uri "http://localhost:8001/heroes/" -Method Post -Headers $headers -Body $body
+
+
+ex:
+PS C:\Users\pcuserj> $headers = @{
+>>     "accept" = "application/json"
+>>     "Content-Type" = "application/json"
+>> }
+PS C:\Users\pcuserj>
+PS C:\Users\pcuserj> $body = @{
+>>     id = 1
+>>     name = "my hero"
+>>     secret_name = "austing"
+>>     age = 12
+>> } | ConvertTo-Json -Compress
+PS C:\Users\pcuserj>
+PS C:\Users\pcuserj> Invoke-RestMethod -Uri "http://localhost:8001/heroes/" -Method Post -Headers $headers -Body $body
+
+secret_name age name    id
+----------- --- ----    --
+austing      12 my hero  1
+
+
+~~~~~~~~~
+P.S 如果出現 Internal Server Error ，可能輸入重複資料PK衝突而失敗，
+簡單做法就是連到DB那台把資料刪除就好
+ex:
+$ psql
+psql (17.4 (Debian 17.4-1.pgdg120+2))
+Type "help" for help.
+
+postgres=# \l
+                                                    List of databases
+   Name    |  Owner   | Encoding | Locale Provider |  Collate   |   Ctype    | Locale | ICU Rules |   Access privileges   
+-----------+----------+----------+-----------------+------------+------------+--------+-----------+-----------------------
+ example   | postgres | UTF8     | libc            | en_US.utf8 | en_US.utf8 |        |           | 
+ postgres  | postgres | UTF8     | libc            | en_US.utf8 | en_US.utf8 |        |           | 
+ template0 | postgres | UTF8     | libc            | en_US.utf8 | en_US.utf8 |        |           | =c/postgres          +
+           |          |          |                 |            |            |        |           | postgres=CTc/postgres
+ template1 | postgres | UTF8     | libc            | en_US.utf8 | en_US.utf8 |        |           | =c/postgres          +
+           |          |          |                 |            |            |        |           | postgres=CTc/postgres
+(4 rows)
+
+postgres=# \c example 
+You are now connected to database "example" as user "postgres".
+example=# \d
+             List of relations
+ Schema |    Name     |   Type   |  Owner   
+--------+-------------+----------+----------
+ public | hero        | table    | postgres
+ public | hero_id_seq | sequence | postgres
+(2 rows)
+
+example=# table hero;
+ id |  name   | secret_name | age 
+----+---------+-------------+-----
+  1 | my hero | austing     |  12
+(1 row)
+
+example=# truncate hero ;
+TRUNCATE TABLE
